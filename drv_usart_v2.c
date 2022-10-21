@@ -284,7 +284,7 @@ static rt_err_t stm32_control(struct rt_serial_device *serial, int cmd, void *ar
     return RT_EOK;
 }
 
-static int stm32_putc(struct rt_serial_device *serial, char c)
+/*static int stm32_putc1(struct rt_serial_device *serial, char c)
 {
     struct stm32_uart *uart;
     RT_ASSERT(serial != RT_NULL);
@@ -295,8 +295,33 @@ static int stm32_putc(struct rt_serial_device *serial, char c)
     UART_SET_TDR(&uart->handle, c);
 
     return 1;
-}
+}*/
+//-----------------------------------
+static int stm32_putc(struct rt_serial_device *serial, char c)//-------------------8改16
+{
+    rt_uint32_t start, now, delta, reload, us_tick, us;
 
+    start = SysTick->VAL;                           //----------------------增加超时处理
+    reload = SysTick->LOAD;                         //----------------------增加超时处理
+    us_tick = SystemCoreClock / 1000000UL;          //----------------------增加超时处理
+    us = 90; //90us > 86.806uS = 10 / 115200bps     //----------------------增加超时处理
+    us = us_tick * us;
+
+    struct stm32_uart *uart;
+    RT_ASSERT(serial != RT_NULL);
+
+    uart = rt_container_of(serial, struct stm32_uart, serial);
+    //while (__HAL_UART_GET_FLAG(&(uart->handle), UART_FLAG_TC) == RESET);                    //----------------------删除死循环
+    do {                                                                                      //----------------------增加超时处理
+        now = SysTick->VAL;                                                                   //----------------------增加超时处理
+        delta = start > now ? start - now : reload + start - now;                             //----------------------增加超时处理
+    } while((__HAL_UART_GET_FLAG(&(uart->handle), UART_FLAG_TC) == RESET) && (delta < us));   //----------------------增加超时处理
+
+    UART_INSTANCE_CLEAR_FUNCTION(&(uart->handle), UART_FLAG_TC);
+    UART_SET_TDR(&uart->handle, c);
+
+    return 1;
+}
 rt_uint32_t stm32_uart_get_mask(rt_uint32_t word_length, rt_uint32_t parity)
 {
     rt_uint32_t mask;
@@ -1085,6 +1110,7 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
     struct stm32_uart *uart = (struct stm32_uart *)huart;
     LOG_D("%s: %s %d\n", __FUNCTION__, uart->config->name, huart->ErrorCode);
     UNUSED(uart);
+    dma_recv_isr(&uart->serial, UART_RX_DMA_IT_ERR_FLAG); //-------------增加一个DMA错误标志调用
 }
 
 /**
@@ -1094,13 +1120,13 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
   *         you can add your own implementation.
   * @retval None
   */
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+/*void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     struct stm32_uart *uart;
     RT_ASSERT(huart != NULL);
     uart = (struct stm32_uart *)huart;
     dma_recv_isr(&uart->serial, UART_RX_DMA_IT_TC_FLAG);
-}
+}*/
 
 /**
   * @brief  Rx Half transfer completed callback
@@ -1109,13 +1135,13 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
   *         and you can add your own implementation.
   * @retval None
   */
-void HAL_UART_RxHalfCpltCallback(UART_HandleTypeDef *huart)
+/*void HAL_UART_RxHalfCpltCallback(UART_HandleTypeDef *huart)
 {
     struct stm32_uart *uart;
     RT_ASSERT(huart != NULL);
     uart = (struct stm32_uart *)huart;
     dma_recv_isr(&uart->serial, UART_RX_DMA_IT_HT_FLAG);
-}
+}*/
 
 /**
   * @brief  HAL_UART_TxCpltCallback
